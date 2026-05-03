@@ -9,7 +9,6 @@ import BooksBarChart from '../../components/charts/BooksBarChart'
 import BorrowPieChart from '../../components/charts/BorrowPieChart'
 import DailyBorrowLineChart from '../../components/charts/DailyBorrowLineChart'
 import { axiosInstance } from '../../api/axios'
-import { socket } from '../../api/socket'
 
 function LibrarianDashboard({ books, setBooks, bookSearch, setBookSearch, onLogout, userProfile, onProfileUpdate, navigate, unreadCount }) {
   const location = useLocation()
@@ -173,19 +172,7 @@ function LibrarianDashboard({ books, setBooks, bookSearch, setBookSearch, onLogo
       setOnlineStudents(students)
     }
 
-    const handleStatusUpdate = (data) => {
-      // Refresh records when someone borrows
-      console.log('Book status update received:', data)
-      fetchData()
-    }
-
-    socket.on('online_users_update', handleOnlineUsers)
-    socket.on('book_status_update', handleStatusUpdate)
-
-    return () => {
-      socket.off('online_users_update', handleOnlineUsers)
-      socket.off('book_status_update', handleStatusUpdate)
-    }
+    return () => {}
   }, [fetchData])
 
   useEffect(() => {
@@ -558,11 +545,6 @@ function LibrarianDashboard({ books, setBooks, bookSearch, setBookSearch, onLogo
       } else {
         res = await axiosInstance.post('/books', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
-        })
-        
-        // Notify other users (students) that a new book was added
-        import('../../api/socket').then(({ socket }) => {
-          socket.emit('new_book_added', res.data)
         })
       }
 

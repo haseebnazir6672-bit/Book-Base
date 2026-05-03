@@ -30,7 +30,6 @@ import { KnowledgeHubProvider } from './contexts/KnowledgeHubContext'
 // import { studentBorrowedBooks } from './data/mockData' // Removed unused import
 import { logout } from './redux/authSlice'
 import { axiosInstance } from './api/axios'
-import { socket } from './api/socket'
 
 function App() {
   const [userName] = useState('zeeshan')
@@ -105,16 +104,7 @@ function App() {
     }
   }, [token]);
 
-  // ================= REAL-TIME UPDATES (FOR ALL USERS) =================
-  useEffect(() => {
-    socket.on('refresh_books', (data) => {
-      fetchBooks();
-    });
 
-    return () => {
-      socket.off('refresh_books');
-    };
-  }, [fetchBooks]);
 
   // ================= ROLE HELPERS =================
   const isAdmin = user?.role === 'admin'
@@ -124,16 +114,6 @@ function App() {
   // ================= AUTHENTICATED USER UPDATES =================
   useEffect(() => {
     if (!token || !user) return;
-
-    // Emit online status only when we have both user ID and profile name
-    if (userProfile) {
-      socket.emit('user_online', {
-        id: user.id,
-        role: user.role,
-        name: userProfile.name,
-        regNo: userProfile.regNo
-      });
-    }
 
     const fetchMyBorrowed = async () => {
       if (isStudent) {
@@ -178,90 +158,6 @@ function App() {
     fetchMyBorrowed();
     fetchUsers();
     fetchUnreadCount();
-
-    socket.on('book_status_update', (data) => {
-      toast.clearWaitingQueue();
-      setLibraryBooks((prevBooks) => 
-        prevBooks.map(book => 
-          book.title === data.title ? { ...book, isBorrowed: true } : book
-        )
-      );
-
-      if (userProfile && data.regNo === userProfile.regNo) return;
-
-      toast.info(
-        <div className="flex flex-col gap-2 p-1">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-            <div className="flex flex-col">
-              <span className="font-black text-slate-900 dark:text-white text-sm tracking-tight">{data.studentName}</span>
-              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest">{data.regNo}</span>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-lg">
-              <span className="text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase">Borrowed</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            <div className="w-8 h-10 bg-slate-100 dark:bg-slate-700 rounded flex items-center justify-center text-slate-400">
-              <span className="text-[10px] font-bold">BK</span>
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">{data.title}</span>
-              <span className="text-[9px] text-slate-400">Library Book Issue</span>
-            </div>
-          </div>
-        </div>,
-        { 
-          toastId: `update-${data.title}-${data.regNo}`,
-          autoClose: 6000,
-          icon: false,
-          className: "dark:bg-slate-800 dark:border-slate-700 border shadow-2xl rounded-2xl",
-          bodyClassName: "p-0"
-        }
-      )
-    });
-
-    socket.on('new_notification', (notification) => {
-      toast.clearWaitingQueue();
-      toast.info(
-        <div className="flex flex-col gap-2 p-1">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-            <div className="flex flex-col">
-              <span className="font-black text-slate-900 dark:text-white text-sm tracking-tight">{notification.title}</span>
-              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest">
-                Message from {notification.sender?.role === 'librarian' ? 'Librarian' : notification.sender?.name || 'System'}
-              </span>
-            </div>
-            <div className="bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">
-              <span className="text-indigo-600 dark:text-indigo-400 font-black text-[9px] uppercase">New</span>
-            </div>
-          </div>
-          <div className="mt-1">
-            <p className="text-[11px] font-medium text-slate-700 dark:text-slate-200 line-clamp-2">{notification.message}</p>
-          </div>
-        </div>,
-        {
-          toastId: `notif-${notification._id}`,
-          autoClose: 8000,
-          icon: false,
-          className: "dark:bg-slate-800 dark:border-slate-700 border shadow-2xl rounded-2xl",
-        }
-      );
-      setUnreadCount(prev => prev + 1);
-    });
-
-    socket.on('borrow_record_deleted', (data) => {
-      if (user && user.id === data.studentId) {
-        toast.clearWaitingQueue();
-        fetchMyBorrowed();
-        toast.info('Your borrow record has been updated by the librarian.', { toastId: 'record-deleted' });
-      }
-    });
-
-    return () => {
-      socket.off('book_status_update');
-      socket.off('new_notification');
-      socket.off('borrow_record_deleted');
-    };
   }, [token, user, userProfile, isStudent, isAdmin, fetchBooks]);
 
   const handleAddReview = (review) => {
