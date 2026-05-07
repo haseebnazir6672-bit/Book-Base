@@ -3,8 +3,6 @@ import dotenv from 'dotenv'
 import cors from 'cors'
 import connectDB from './config/db.js'
 import { createAdmin } from './utilis/createAdmin.js'
-import http from 'http'
-import { Server } from 'socket.io'
 import { checkOverdueAndBlock } from './controllers/borrowController.js'
 
 import authRoutes from './routes/authRoutes.js'
@@ -19,63 +17,14 @@ dotenv.config()
 
 const app = express()
 
-// ✅ Create server FIRST
-const server = http.createServer(app)
+// ================= MIDDLEWARE =================
+app.use(cors({
+  origin: 'https://book-base-rust.vercel.app',
+  credentials: true
+}))
 
-// ✅ Socket setup
-const io = new Server(server, {
-  cors: {
-    origin: "https://book-base-rust.vercel.app",
-    methods: ["GET", "POST"]
-  }
-})
-
-// Middleware
-app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-
-// Make io accessible in routes
-app.use((req, res, next) => {
-  req.io = io
-  next()
-})
-
-// ================= SOCKET =================
-const onlineUsers = new Map()
-
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id)
-
-  socket.emit('online_users_update', Array.from(onlineUsers.values()))
-
-  socket.on('user_online', (data) => {
-    onlineUsers.set(socket.id, data)
-    io.emit('online_users_update', Array.from(onlineUsers.values()))
-  })
-
-  socket.on('borrow_book', (data) => {
-    socket.broadcast.emit('book_status_update', data)
-  })
-
-  socket.on('new_book_added', () => {
-    io.emit('refresh_books')
-  })
-
-  socket.on('send_private_notification', (data) => {
-    for (const [sid, user] of onlineUsers.entries()) {
-      if (user.id === data.recipientId) {
-        io.to(sid).emit('new_notification', data.notification)
-      }
-    }
-  })
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id)
-    onlineUsers.delete(socket.id)
-    io.emit('online_users_update', Array.from(onlineUsers.values()))
-  })
-})
 
 // ================= ROUTES =================
 app.use('/api/auth', authRoutes)
@@ -100,10 +49,9 @@ app.use((err, req, res, next) => {
 })
 
 // ================= START SERVER =================
-// ✅ ONLY use Render port
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 5000
 
-server.listen(PORT, async () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
 
   try {
@@ -114,12 +62,12 @@ server.listen(PORT, async () => {
     console.log("Admin checked/created")
 
     // Initial overdue check
-    await checkOverdueAndBlock({ io }, null)
+    await checkOverdueAndBlock()
 
     // Run every hour
     setInterval(async () => {
       console.log('Running scheduled overdue check...')
-      await checkOverdueAndBlock({ io }, null)
+      await checkOverdueAndBlock()
     }, 60 * 60 * 1000)
 
   } catch (err) {
